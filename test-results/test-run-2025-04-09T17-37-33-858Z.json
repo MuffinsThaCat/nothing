@@ -1,0 +1,26 @@
+{
+  "timestamp": "2025-04-09T17:37:33.858Z",
+  "duration": 1.802,
+  "totalTests": 0,
+  "passed": [],
+  "failed": [
+    {
+      "category": "Contract Unit Tests",
+      "count": 0
+    },
+    {
+      "category": "ZK Utils Tests",
+      "count": 0
+    },
+    {
+      "category": "Solver Tests",
+      "count": 0
+    },
+    {
+      "category": "Integration Tests",
+      "count": 0
+    }
+  ],
+  "skipped": [],
+  "allPassed": false
+}

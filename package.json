@@ -1,0 +1,42 @@
+{
+  "name": "eerc20-batch-dex",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/run-tests.js",
+    "test:unit": "hardhat test test/unit/**/*.test.js",
+    "test:zkutils": "hardhat test test/zkutils/**/*.test.js",
+    "test:solver": "hardhat test test/solver/**/*.test.js",
+    "test:integration": "hardhat test test/integration/**/*.test.js",
+    "test:contracts": "hardhat test test/unit/**/*.test.js",
+    "test:verbose": "HARDHAT_VERBOSE=true node scripts/run-tests.js",
+    "test:frontend": "node test/test-integration.js",
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "node": "hardhat node"
+  },
+  "keywords": [
+    "eerc20",
+    "dex",
+    "zero-knowledge",
+    "batch-auction",
+    "blockchain"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "A privacy-preserving batch auction DEX for eerc20 tokens",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "chai": "^4.3.7",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
+    "hardhat": "^2.22.19"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.9.5",
+    "@zk-kit/baby-jubjub": "^1.0.3",
+    "maci-crypto": "^2.5.0"
+  }
+}

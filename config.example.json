@@ -1,0 +1,12 @@
+{
+  "rpcUrl": "https://api.avax-test.network/ext/bc/C/rpc",
+  "dexAddress": "0x0000000000000000000000000000000000000000",
+  "privateKey": "",
+  "batchInterval": 300,
+  "maxOrdersPerBatch": 500,
+  "maxPriceLevels": 50,
+  "minLiquidity": 100,
+  "maxSlippage": 5,
+  "gasLimit": 5000000,
+  "logLevel": "info"
+}

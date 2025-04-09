@@ -1,0 +1,19 @@
+{
+  "name": "eerc20-dex-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for EERC20 Privacy DEX on Avalanche",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "ethers": "^6.7.1",
+    "svelte": "^4.2.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^2.4.5",
+    "vite": "^4.4.9"
+  }
+}
