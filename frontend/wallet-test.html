@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EERC20 Wallet Connection Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        button {
+            background-color: #E84142;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #c53030;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>EERC20 Wallet Connection Test</h1>
+    <p>This page tests the wallet connection functionality in isolation to troubleshoot connection issues.</p>
+    
+    <button id="connectWallet">Connect Wallet</button>
+    <button id="getChainId">Get Chain ID</button>
+    <button id="getSigner">Get Signer</button>
+    
+    <div id="status" class="status"></div>
+    <pre id="logs"></pre>
+
+    <script type="module">
+        // Import ethers from CDN to ensure we're using the latest version
+        import { ethers } from 'https://cdn.ethers.io/lib/ethers-5.7.esm.min.js';
+        
+        const logElement = document.getElementById('logs');
+        const statusElement = document.getElementById('status');
+        
+        function log(message) {
+            console.log(message);
+            logElement.textContent += message + '\n';
+        }
+        
+        function setStatus(message, isSuccess = true) {
+            statusElement.textContent = message;
+            statusElement.className = isSuccess ? 'status success' : 'status error';
+        }
+        
+        document.getElementById('connectWallet').addEventListener('click', async () => {
+            logElement.textContent = ''; // Clear logs
+            
+            try {
+                log('Checking for Ethereum provider...');
+                
+                if (typeof window.ethereum === 'undefined') {
+                    log('No Web3 provider detected. Please install MetaMask or another wallet.');
+                    setStatus('No wallet detected. Please install MetaMask.', false);
+                    return;
+                }
+                
+                log('Ethereum provider found: ' + (window.ethereum.isMetaMask ? 'MetaMask' : 'Other wallet'));
+                
+                log('Requesting accounts...');
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                
+                log('Accounts received: ' + accounts.length);
+                if (accounts.length > 0) {
+                    const address = accounts[0];
+                    log('Connected address: ' + address);
+                    setStatus('Wallet connected successfully! Address: ' + address);
+                } else {
+                    log('No accounts returned');
+                    setStatus('No accounts returned from wallet', false);
+                }
+            } catch (error) {
+                log('Error connecting wallet: ' + error.message);
+                setStatus('Failed to connect wallet: ' + error.message, false);
+            }
+        });
+        
+        document.getElementById('getChainId').addEventListener('click', async () => {
+            try {
+                log('Requesting chain ID...');
+                
+                if (typeof window.ethereum === 'undefined') {
+                    log('No Web3 provider detected');
+                    setStatus('No wallet detected', false);
+                    return;
+                }
+                
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                const chainIdDecimal = parseInt(chainId, 16);
+                
+                log('Chain ID: ' + chainId + ' (decimal: ' + chainIdDecimal + ')');
+                
+                // Check if it's Avalanche C-Chain
+                if (chainIdDecimal === 43114) {
+                    log('Connected to Avalanche C-Chain (Mainnet)');
+                    setStatus('Connected to Avalanche C-Chain (Mainnet)');
+                } else if (chainIdDecimal === 43113) {
+                    log('Connected to Avalanche Fuji Testnet');
+                    setStatus('Connected to Avalanche Fuji Testnet');
+                } else if (chainIdDecimal === 1) {
+                    log('Connected to Ethereum Mainnet');
+                    setStatus('Connected to Ethereum Mainnet');
+                } else {
+                    log('Connected to chain ID: ' + chainIdDecimal);
+                    setStatus('Connected to chain ID: ' + chainIdDecimal);
+                }
+            } catch (error) {
+                log('Error getting chain ID: ' + error.message);
+                setStatus('Failed to get chain ID: ' + error.message, false);
+            }
+        });
+        
+        document.getElementById('getSigner').addEventListener('click', async () => {
+            try {
+                log('Creating ethers provider and getting signer...');
+                
+                if (typeof window.ethereum === 'undefined') {
+                    log('No Web3 provider detected');
+                    setStatus('No wallet detected', false);
+                    return;
+                }
+                
+                // Try with ethers 5 first
+                try {
+                    log('Attempting with ethers 5 Web3Provider...');
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    const signer = provider.getSigner();
+                    const address = await signer.getAddress();
+                    log('Signer created successfully (ethers 5)');
+                    log('Signer address: ' + address);
+                    setStatus('Signer created successfully: ' + address);
+                } catch (ethers5Error) {
+                    log('Ethers 5 method failed: ' + ethers5Error.message);
+                    log('Attempting with ethers 6 BrowserProvider...');
+                    
+                    // If ethers 5 fails, try with ethers 6 syntax
+                    try {
+                        const provider = new ethers.BrowserProvider(window.ethereum);
+                        const signer = await provider.getSigner();
+                        const address = await signer.getAddress();
+                        log('Signer created successfully (ethers 6)');
+                        log('Signer address: ' + address);
+                        setStatus('Signer created successfully: ' + address);
+                    } catch (ethers6Error) {
+                        log('Ethers 6 method failed: ' + ethers6Error.message);
+                        throw new Error('Failed with both ethers 5 and 6 methods');
+                    }
+                }
+            } catch (error) {
+                log('Error getting signer: ' + error.message);
+                setStatus('Failed to get signer: ' + error.message, false);
+            }
+        });
+        
+        // Log initial status on page load
+        log('Page loaded. Click "Connect Wallet" to begin the test.');
+        log('Checking for ethereum provider...');
+        log('window.ethereum exists: ' + (typeof window.ethereum !== 'undefined'));
+        if (typeof window.ethereum !== 'undefined') {
+            log('Provider is MetaMask: ' + (window.ethereum.isMetaMask ? 'Yes' : 'No'));
+        }
+    </script>
+</body>
+</html>

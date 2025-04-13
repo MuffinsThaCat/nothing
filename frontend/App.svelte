@@ -1,5 +1,7 @@
 <script>
   import { onMount } from 'svelte';
+import SafeParameterHandler, { safeLogger } from './utils/SafeParameterHandler.js';
+import EERC20Adapter from './adapters/EERC20Adapter.js';
   import Header from './components/Header.svelte';
   import SwapPanel from './components/SwapPanel.svelte';
   import LiquidityPanel from './components/LiquidityPanel.svelte';
@@ -7,10 +9,12 @@
   import NetworkStatus from './components/NetworkStatus.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
   import DexProvider from './components/DexProvider.svelte';
+  import BridgePanel from './components/BridgePanel.svelte';
   import { writable } from 'svelte/store';
   import dexService, { 
     walletState, 
-    privacySettings, 
+    dexState,
+    bridgeState,
     networkStatus, 
     currentBatch 
   } from './services/dexService';
@@ -22,7 +26,13 @@
   // Connection handler
   const handleConnect = async () => {
     try {
-      await dexService.initializeDexServices();
+      console.log('Connecting wallet...');
+      // First initialize services if needed
+      if (!dexService.isInitialized) {
+        await dexService.initializeDexServices();
+      }
+      // Then connect the wallet
+      await dexService.connectWallet();
     } catch (error) {
       console.error('Failed to connect:', error);
     }
@@ -97,11 +107,8 @@
               <SwapPanel batchInfo={$currentBatch} />
             {:else if $currentView === 'liquidity'}
               <LiquidityPanel />
-            {:else}
-              <div class="bridge-panel">
-                <h2>EERC20 Bridge</h2>
-                <p>Connect wallet to access privacy-preserving bridging between EERC20 and standard tokens.</p>
-              </div>
+            {:else if $currentView === 'bridge'}
+              <BridgePanel />
             {/if}
           </div>
         </div>

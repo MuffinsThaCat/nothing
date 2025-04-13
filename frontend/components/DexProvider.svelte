@@ -1,14 +1,20 @@
 <script>
   import { onMount, onDestroy, setContext } from 'svelte';
-  import dexService, { 
+  import dexService from '../services/dexService';
+  
+  // Access the stores from the dexService default export
+  // Using Wasmlanche safe parameter principles for data access
+  const { 
     walletState, 
     privacySettings, 
-    networkStatus, 
+    dexState, 
+    bridgeState,
+    networkStatus,
     currentBatch,
     liquidityPools,
     userBalances,
     isInitialized
-  } from '../services/dexService';
+  } = dexService;
   
   export let autoConnect = false;
   

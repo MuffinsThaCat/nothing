@@ -1,5 +1,6 @@
 <script>
-  import { privacySettings } from '../services/dexService';
+  import dexService from '../services/dexService';
+  const { privacySettings } = dexService;
   
   // Privacy features of EERC20 Batch DEX
   let features = [

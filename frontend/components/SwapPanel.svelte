@@ -1,10 +1,13 @@
 <script>
   import { onMount, getContext } from 'svelte';
   import { ethers } from 'ethers';
-  import { walletState, privacySettings } from '../services/dexService';
+  import dexServiceModule from '../services/dexService';
   
-  // Get the dexService from context
-  const dexService = getContext('dexService');
+  // Get stores from dexService
+  const { walletState, privacySettings } = dexServiceModule;
+  
+  // Get the dexService from context if available, otherwise use the imported one
+  const dexService = getContext('dexService') || dexServiceModule;
   
   // Batch information from the DEX backend
   export let batchInfo = {
@@ -17,8 +20,8 @@
   // Token input/output state
   let fromTokenAmount = '';
   let toTokenAmount = '';
-  let fromToken = { symbol: 'EERC20-AVAX', logo: '🔒', address: '0x1111111111111111111111111111111111111111' };
-  let toToken = { symbol: 'EERC20-USDC', logo: '🔒', address: '0x2222222222222222222222222222222222222222' };
+  let fromToken = { symbol: 'EERC20-A', logo: '', address: '0x1111111111111111111111111111111111111111' };
+  let toToken = { symbol: 'EERC20-B', logo: '', address: '0x2222222222222222222222222222222222222222' };
   
   // Swap parameters
   let priceImpact = 0.05;
@@ -84,45 +87,55 @@
         18 // Assuming 18 decimals
       ).toString();
       
-      // Get swap quote from backend if wallet is connected
-      if ($walletState.connected) {
-        swapError = null;
-        
-        // Artificial delay to show responsiveness
-        setTimeout(async () => {
-          try {
-            const quote = await dexService.getSwapQuote(
-              fromToken.address,
-              toToken.address,
-              amount
-            );
-            
-            // Format the output amount
-            const outputAmount = ethers.formatUnits(quote.amountOut, 18);
-            
-            // Validate output is reasonable (Wasmlanche principle)
-            if (safeParseFloat(outputAmount) < 0) {
-              toTokenAmount = '0';
-            } else {
-              toTokenAmount = parseFloat(outputAmount).toFixed(6);
-            }
-            
-            // Update price impact
-            priceImpact = quote.priceImpact;
-          } catch (error) {
-            console.error('Error getting swap quote:', error);
-            swapError = error.message || 'Failed to get swap quote';
+      // For demo purposes, always fetch the quote regardless of wallet connection
+      swapError = null;
+      
+      // Artificial delay to show responsiveness
+      setTimeout(async () => {
+        try {
+          console.log('Fetching swap quote for tokens:', fromToken.symbol, '->', toToken.symbol, 'amount:', amount);
+          
+          // Get swap quote with mocked balances
+          const quote = await dexService.getSwapQuote(
+            fromToken.address,
+            toToken.address,
+            amount
+          );
+          
+          console.log('Received quote result:', quote);
+          
+          // Ensure the quote has an amountOut value
+          if (!quote.amountOut) {
+            console.error('Quote missing amountOut value:', quote);
             toTokenAmount = '0';
+            return;
           }
-        }, 300);
-      } else {
-        // Fallback calculation when not connected (Wasmlanche principle: fallback)
-        toTokenAmount = (safeParseFloat(fromTokenAmount) * 1950 * (1 - (0.05 / 100))).toFixed(6);
-      }
+          
+          // Format the output amount
+          const outputAmount = ethers.formatUnits(quote.amountOut, 18);
+          console.log('Formatted output amount:', outputAmount);
+          
+          // Validate output is reasonable (Wasmlanche principle)
+          if (safeParseFloat(outputAmount) <= 0) {
+            console.warn('Output amount is zero or negative:', outputAmount);
+            toTokenAmount = '0';
+          } else {
+            toTokenAmount = parseFloat(outputAmount).toFixed(6);
+            console.log('Setting display amount to:', toTokenAmount);
+          }
+          
+          // Update price impact
+          priceImpact = quote.priceImpact;
+        } catch (error) {
+          console.error('Error getting swap quote:', error);
+          swapError = error.message || 'Failed to get swap quote';
+          toTokenAmount = '0';
+        }
+      }, 300);
     } catch (error) {
-      console.error('Error updating to amount:', error);
-      swapError = 'Error calculating output amount';
-      toTokenAmount = '';
+      console.error('Error in updateToAmount:', error);
+      swapError = error.message || 'Failed to process input amount';
+      toTokenAmount = '0';
     }
   }
   
@@ -153,17 +166,18 @@
   async function handleSwap() {
     if (!fromTokenAmount || !toTokenAmount || swapping) return;
     
-    // Check wallet connection
-    if (!$walletState.connected) {
-      swapError = 'Please connect your wallet first';
+    // For demo purposes, allow swaps without wallet connection
+    if (!fromTokenAmount || !toTokenAmount || fromTokenAmount === '0' || toTokenAmount === '0') {
+      swapError = 'Invalid swap amount';
       return;
     }
+    
+    console.log('Executing swap:', fromToken.symbol, '->', toToken.symbol, 'amount:', fromTokenAmount);
     
     swapping = true;
     swapError = null;
     
     try {
-      // Calculate minimum output with slippage
       const amount = ethers.parseUnits(fromTokenAmount.toString(), 18).toString();
       const minOutputAmount = ethers.parseUnits(
         (parseFloat(toTokenAmount) * (1 - (slippage / 100))).toFixed(18), 
@@ -201,8 +215,8 @@
     }
   }
   
-  // Validation for swap button
-  $: canSwap = Boolean(fromTokenAmount && toTokenAmount && !swapping && !swapError && $walletState.connected);
+  // Validation for swap button - for demo purposes, don't require wallet connection
+  $: canSwap = Boolean(fromTokenAmount && toTokenAmount && !swapping && !swapError);
   
   onMount(() => {
     // Initial token list could be loaded here
@@ -262,18 +276,21 @@
     <div class="to-token-container">
       <div class="input-label">To (Estimated)</div>
       <div class="token-input-container">
-        <input 
-          type="number" 
-          placeholder="0.0" 
+        <input
+          type="text"
           bind:value={toTokenAmount}
           on:input={updateFromAmount}
-          class="token-amount-input"
+          placeholder="0.00"
+          disabled={swapping}
         />
         <button class="token-selector">
           <span class="token-logo">{toToken.logo}</span>
           <span class="token-symbol">{toToken.symbol}</span>
           <span class="selector-arrow">▼</span>
         </button>
+        {#if fromTokenAmount && parseFloat(fromTokenAmount) > 0 && toTokenAmount === '0'}
+          <div class="error-message">No price available</div>
+        {/if}
       </div>
       <div class="token-balance">Balance: 100.50 {toToken.symbol}</div>
     </div>
@@ -312,7 +329,7 @@
     
     <button 
       class="swap-button" 
-      disabled={!fromTokenAmount || !toTokenAmount || swapping}
+      disabled={!fromTokenAmount || !toTokenAmount || toTokenAmount === '0' || swapping}
       on:click={handleSwap}
     >
       {#if swapping}
@@ -320,6 +337,8 @@
         Processing...
       {:else if !$walletState.connected}
         Connect Wallet to Swap
+      {:else if toTokenAmount === '0'}
+        Enter An Amount
       {:else}
         Swap in Next Batch
       {/if}
