@@ -80,7 +80,27 @@ import EERC20Adapter from './adapters/EERC20Adapter.js';
       <div class="content-area">
         <div class="sidebar">
           <PrivacyDashboard />
-          <NetworkStatus metrics={$networkStatus} />
+          <div class="batch-info-container">
+            <div class="batch-header">
+              <h3>Current Batch</h3>
+              <div class="batch-id">{$currentBatch.id || 'batch-1'}</div>
+            </div>
+            
+            <div class="batch-stats">
+              <div class="stat">
+                <span class="stat-value">{$currentBatch.timeRemaining || '00:00'}</span>
+                <span class="stat-label">Remaining</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value">{$currentBatch.ordersCount || 0}</span>
+                <span class="stat-label">Orders</span>
+              </div>
+              <div class="stat">
+                <span class="stat-value">{$currentBatch.tvl || '$0'}</span>
+                <span class="stat-label">TVL</span>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="main-panel">
@@ -144,20 +164,76 @@ import EERC20Adapter from './adapters/EERC20Adapter.js';
   
   .content-area {
     display: flex;
-    gap: 2rem;
-    margin-top: 2rem;
+    gap: 1rem;
+    margin-top: 1rem;
   }
   
   .sidebar {
-    width: 320px;
+    flex: 0 0 300px;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
+  }
+  
+  .batch-info-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+  }
+  
+  .batch-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  
+  .batch-id {
+    background: rgba(232, 65, 66, 0.1);
+    padding: 0.3rem 0.7rem;
+    border-radius: 0.75rem;
+    font-size: 0.8rem;
+    color: #E84142;
+    font-family: monospace;
+  }
+  
+  .batch-stats {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+  
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    flex: 1;
+  }
+  
+  .stat-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  
+  .stat-label {
+    font-size: 0.75rem;
+    opacity: 0.6;
   }
   
   .main-panel {
     flex-grow: 1;
-    border-radius: 1rem;
+    border-radius: 0.75rem;
     overflow: hidden;
     backdrop-filter: blur(10px);
     background: rgba(255, 255, 255, 0.03);

@@ -225,28 +225,6 @@
 </script>
 
 <div class="swap-panel">
-  <div class="batch-info">
-    <div class="batch-header">
-      <h3>Current Batch</h3>
-      <div class="batch-id">{batchInfo.id}</div>
-    </div>
-    
-    <div class="batch-stats">
-      <div class="stat">
-        <span class="stat-value">{batchInfo.timeRemaining}</span>
-        <span class="stat-label">Remaining</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value">{batchInfo.ordersCount}</span>
-        <span class="stat-label">Orders</span>
-      </div>
-      <div class="stat">
-        <span class="stat-value">{batchInfo.tvl}</span>
-        <span class="stat-label">TVL</span>
-      </div>
-    </div>
-  </div>
-  
   <div class="swap-container">
     <div class="from-token-container">
       <div class="input-label">From</div>
@@ -354,111 +332,59 @@
   .swap-panel {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-  }
-  
-  .batch-info {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 1rem;
-    padding: 1.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  
-  .batch-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-  
-  .batch-header h3 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-  
-  .batch-id {
-    background: rgba(232, 65, 66, 0.1);
-    padding: 0.3rem 0.7rem;
-    border-radius: 1rem;
-    font-size: 0.8rem;
-    color: #E84142;
-    font-family: monospace;
-  }
-  
-  .batch-stats {
-    display: flex;
-    gap: 1rem;
-    justify-content: space-between;
-  }
-  
-  .stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 0.75rem;
-    border-radius: 0.75rem;
-    flex: 1;
-  }
-  
-  .stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-  }
-  
-  .stat-label {
-    font-size: 0.75rem;
-    opacity: 0.7;
+    gap: 0.4rem;
   }
   
   .swap-container {
     background: rgba(255, 255, 255, 0.03);
-    border-radius: 1.5rem;
-    padding: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.8rem;
   }
   
   .from-token-container, .to-token-container {
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 1rem;
-    padding: 1rem;
+    border-radius: 0.8rem;
+    padding: 0.8rem;
   }
   
   .input-label {
     font-size: 0.875rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
     opacity: 0.7;
   }
   
   .token-input-container {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.3rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
   
   .token-amount-input {
     flex-grow: 1;
     background: transparent;
     border: none;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     color: inherit;
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
     outline: none;
   }
   
   .token-selector {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
     background: rgba(255, 255, 255, 0.05);
     border: none;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.75rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.5rem;
     cursor: pointer;
     transition: all 0.2s ease;
     color: inherit;
@@ -483,46 +409,46 @@
   
   .token-balance {
     font-size: 0.75rem;
-    margin-top: 0.5rem;
-    opacity: 0.7;
+    margin-top: 0.3rem;
+    opacity: 0.6;
     text-align: right;
+    color: rgba(255, 255, 255, 0.6);
   }
   
   .switch-button {
     align-self: center;
     background: rgba(232, 65, 66, 0.1);
     border: none;
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 0.75rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     color: #E84142;
     transition: all 0.2s ease;
-    margin: 0.5rem 0;
-  }
-  
-  .switch-button:hover {
-    background: rgba(232, 65, 66, 0.2);
-    transform: scale(1.05);
+    margin: 0.4rem auto;
+    background: linear-gradient(135deg, #e84142 0%, #b91a1b 100%);
+    border: none;
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(232, 65, 66, 0.3);
   }
   
   .swap-details {
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 1rem;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+    margin-top: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.75rem;
+    padding: 0.6rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
   
   .detail-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    font-size: 0.875rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.8rem;
   }
   
   .detail-label {
@@ -572,12 +498,13 @@
     color: white;
     border: none;
     border-radius: 0.75rem;
-    padding: 1rem;
+    padding: 0.75rem 0;
+    font-size: 0.9rem;
     font-weight: 600;
-    font-size: 1rem;
     cursor: pointer;
-    transition: all 0.3s ease;
-    margin-top: 0.5rem;
+    margin-top: 0.75rem;
+    width: 100%;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -610,9 +537,9 @@
   
   .swap-error {
     color: #E84142;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 500;
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     padding: 0.5rem 0.75rem;
     background: rgba(232, 65, 66, 0.1);
     border-radius: 0.5rem;
@@ -624,7 +551,6 @@
   }
   
   /* Light theme overrides */
-  :global(.light-theme) .batch-info,
   :global(.light-theme) .swap-container {
     background: rgba(255, 255, 255, 0.7);
     border: 1px solid rgba(0, 0, 0, 0.05);
@@ -645,9 +571,5 @@
   
   :global(.light-theme) .token-selector:hover {
     background: rgba(0, 0, 0, 0.1);
-  }
-  
-  :global(.light-theme) .stat {
-    background: rgba(0, 0, 0, 0.05);
   }
 </style>

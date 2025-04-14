@@ -154,7 +154,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.5rem 0;
+    padding: 0.8rem 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
   
@@ -189,8 +189,8 @@
   }
   
   .tag-line {
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
+    margin-top: 0.1rem;
+    font-size: 0.75rem;
     opacity: 0.6;
     margin-left: 3.4rem;
   }
@@ -227,11 +227,11 @@
   .connect-button {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1.2rem;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
     border-radius: 0.75rem;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     border: none;
     cursor: pointer;
     transition: all 0.2s ease;
