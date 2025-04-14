@@ -54,38 +54,47 @@ class BatchSolverAdapter {
       // In a real implementation, this would query the contract
       // For now, we'll simulate a batch with timing based on current time
       
-      // Create or update batch information
-      if (!this.currentBatchId || !this.batchEndTime || new Date() >= this.batchEndTime) {
-        // Create a new batch
-        this.currentBatchId = 'batch-' + Math.floor(Math.random() * 10000);
-        
-        // Set end time to 2 minutes from now
-        this.batchEndTime = new Date(Date.now() + 120000);
-      }
+      // Create or update batch information with consistent values
+      // Calculate consistent batch ID and timing
+      const now = Date.now();
+      const batchCycleMs = 5 * 60 * 1000; // 5 minute cycles
+      const msElapsedInCycle = now % batchCycleMs;
+      const msRemainingInCycle = batchCycleMs - msElapsedInCycle;
+      
+      // Calculate the current batch cycle number
+      const currentCycleNumber = Math.floor(now / batchCycleMs);
+      
+      // Update the batch ID using the current cycle number
+      this.currentBatchId = `batch-${currentCycleNumber}`;
+      
+      // Set the batch end time based on the current cycle
+      this.batchEndTime = new Date(now + msRemainingInCycle);
+      
+      // Add contract addresses
+      this.batchAuctionDEXAddress = '0x2B0d36FACD61B71CC05ab8F3D2355ec3631C0dd5';
+      this.encryptedERCAddress = '0x51A1ceB83B83F1985a81C295d1fF28Afef186E02';
       
       // Calculate time remaining
-      const now = new Date();
-      const timeRemainingMs = Math.max(0, this.batchEndTime - now);
+      // Using current time from above
+      const timeRemainingMs = Math.max(0, this.batchEndTime - new Date(now));
       const secondsRemaining = Math.floor(timeRemainingMs / 1000);
       
       const minutes = Math.floor(secondsRemaining / 60);
       const seconds = secondsRemaining % 60;
       const timeRemaining = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
       
-      // Generate random but consistent values for this batch
-      const batchNumber = parseInt(this.currentBatchId.split('-')[1], 10);
-      const seedValue = batchNumber || 0;
+      // Use consistent values for batch data
+      // Instead of generating random or semi-random values
       
-      // Calculate values with bounds checking (Wasmlanche principle)
-      const ordersCount = Math.min((seedValue * 7) % 50 + 10, this.MAX_BATCH_ORDERS);
+      // Fixed order count for consistency
+      const ordersCount = 42;
       
-      // TVL with validation
-      const rawTvl = (seedValue * 12500) % 1000000 + 50000;
-      const tvl = `$${Math.min(rawTvl, Number(ethers.formatUnits(this.MAX_BATCH_TVL, 6))).toLocaleString()}`;
+      // Fixed TVL for consistency
+      const tvl = '$24,680.50';
       
       // Status based on time remaining
-      let status = 'active';
-      if (secondsRemaining <= 10) {
+      let status = 'open';
+      if (secondsRemaining <= 30) {
         status = 'finalizing';
       }
       
@@ -164,7 +173,7 @@ class BatchSolverAdapter {
       // Return successful result
       return {
         success: true,
-        orderId: '0x' + Math.random().toString(16).substr(2, 64),
+        orderId: `order-${this.currentBatchId}-${Date.now()}`,
         batchId: batch.id,
         estimatedSettlement: this.batchEndTime.toISOString()
       };

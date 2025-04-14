@@ -1,14 +1,21 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { ethers } from 'ethers';
   import dexService from '../services/dexService';
   import DirectConnect from './DirectConnect';
   import ThemeToggle from './ThemeToggle.svelte';
+  import { writable } from 'svelte/store';
   
   export let connected = false;
   export let address = '';
   export let onConnect = () => {};
   export let onDisconnect = () => {};
+  
+  // Transaction notification system
+  let notifications = [];
+  let notificationTimeouts = [];
+  let maxNotifications = 3;
+  let lastNotificationHash = null; // Track last notification to prevent duplicates
   
   let connecting = false;
   let connectionError = null;
@@ -70,6 +77,78 @@
   function toggleTheme() {
     dispatch('toggleTheme');
   }
+  
+  // Add a new transaction notification
+  function addTransactionNotification(txInfo) {
+    // Skip if no hash or if we've already shown this transaction
+    if (!txInfo || !txInfo.hash) {
+      console.warn('Invalid transaction info:', txInfo);
+      return;
+    }
+    
+    // Prevent duplicate notifications
+    if (notifications.some(n => n.txHash === txInfo.hash)) {
+      console.log('Duplicate notification prevented for:', txInfo.hash);
+      return;
+    }
+    
+    console.log('Creating notification for transaction:', txInfo.hash);
+    lastNotificationHash = txInfo.hash;
+    
+    const notification = {
+      id: Date.now(),
+      type: 'transaction',
+      message: `${txInfo.fromToken} → ${txInfo.toToken} swap added to batch`,
+      txHash: txInfo.hash,
+      timestamp: new Date()
+    };
+    
+    // Add to beginning of array (newest first)
+    notifications = [notification, ...notifications].slice(0, maxNotifications);
+    
+    // Auto-remove after 10 seconds
+    const timeout = setTimeout(() => {
+      notifications = notifications.filter(n => n.id !== notification.id);
+    }, 10000);
+    
+    notificationTimeouts.push(timeout);
+  }
+  
+  // Clear a specific notification
+  function clearNotification(id) {
+    notifications = notifications.filter(n => n.id !== id);
+  }
+  
+  // Listen for transaction events
+  onMount(() => {
+    // Listen for swap completion events with the new custom event name
+    const handleSwapCompleted = (event) => {
+      console.log('Transaction event received in header:', event.detail);
+      addTransactionNotification(event.detail);
+    };
+    
+    // Listen for both event names to be safe
+    window.addEventListener('eerc20-swap-completed', handleSwapCompleted);
+    window.addEventListener('swap-completed', handleSwapCompleted);
+    
+    // Also check for direct variable updates every second as a fallback
+    const checkInterval = setInterval(() => {
+      if (window.lastSwapTransaction && 
+          (!lastNotificationHash || lastNotificationHash !== window.lastSwapTransaction.hash)) {
+        console.log('Found new transaction via global variable:', window.lastSwapTransaction);
+        addTransactionNotification(window.lastSwapTransaction);
+        lastNotificationHash = window.lastSwapTransaction.hash;
+      }
+    }, 1000);
+    
+    return () => {
+      window.removeEventListener('eerc20-swap-completed', handleSwapCompleted);
+      window.removeEventListener('swap-completed', handleSwapCompleted);
+      clearInterval(checkInterval);
+      // Clear all timeouts
+      notificationTimeouts.forEach(t => clearTimeout(t));
+    };
+  });
 </script>
 
 <header class="dex-header">
@@ -144,6 +223,33 @@
             </svg>
           </span>
         </button>
+        
+        <!-- Transaction Notifications -->
+        {#if notifications.length > 0}
+          <div class="transaction-notifications">
+            {#each notifications as notification (notification.id)}
+              <div class="transaction-notification">
+                <div class="notification-content">
+                  <div class="notification-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#27AE60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M9 12L11 14L15 10" stroke="#27AE60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <div class="notification-text">
+                    <div class="notification-message">{notification.message}</div>
+                    <div class="notification-hash">{notification.txHash.substring(0, 8)}...</div>
+                  </div>
+                </div>
+                <button class="notification-close" on:click={() => clearNotification(notification.id)}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -249,6 +355,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    position: relative; /* Important for absolute positioning of children */
   }
   
   .address-display {
@@ -271,8 +378,86 @@
   }
   
   .address-pending {
-    color: #E84142;
+    opacity: 0.6;
+  }
+  
+  /* Transaction notifications */
+  .transaction-notifications {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: 320px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  
+  .transaction-notification {
+    background: rgba(39, 174, 96, 0.1);
+    border: 1px solid rgba(39, 174, 96, 0.2);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    animation: slideIn 0.3s ease;
+  }
+  
+  .notification-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .notification-icon {
+    color: #27AE60;
+  }
+  
+  .notification-text {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .notification-message {
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  
+  .notification-hash {
+    font-size: 0.75rem;
     opacity: 0.7;
+  }
+  
+  .notification-close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+  }
+  
+  .notification-close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  @keyframes slideIn {
+    from {
+      transform: translateY(-10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
   
   .disconnect-button {

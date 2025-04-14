@@ -1656,17 +1656,34 @@ function formatCurrency(value) {
  */
 async function updateCurrentBatch() {
   try {
-    // Generate a mock batch with privacy features
-    // This ensures the privacy-preserving DEX UI works properly
+    // Create a consistent batch with privacy features
+    // Using actual contract addresses and realistic data
+    
+    // Calculate consistent time remaining (5 minute cycles)
+    const now = Date.now();
+    const batchCycleMs = 5 * 60 * 1000; // 5 minutes
+    const msElapsedInCycle = now % batchCycleMs;
+    const msRemainingInCycle = batchCycleMs - msElapsedInCycle;
+    const secondsRemaining = Math.floor(msRemainingInCycle / 1000);
+    const deadlineDate = new Date(now + msRemainingInCycle);
+    
+    // Create a consistent batch ID based on the current cycle
+    const currentCycleNumber = Math.floor(now / batchCycleMs);
+    const batchId = `batch-${currentCycleNumber}`;
+    
+    // Determine if we're close to the end of the batch
+    const isNearEnd = msRemainingInCycle < (30 * 1000); // Last 30 seconds
+    
     const mockBatch = {
-      id: 'batch-' + Math.floor(Math.random() * 1000),
-      status: Math.random() > 0.2 ? 'open' : 'finalizing',
-      timeRemaining: Math.floor(Math.random() * 300), // seconds
-      ordersCount: Math.floor(Math.random() * 150),
-      volume: Math.floor(Math.random() * 1000000) / 100,
-      deadline: new Date(Date.now() + 300000), // 5 minutes from now
-      privateOrdersCount: Math.floor(Math.random() * 50), // Privacy feature
-      zkProofsVerified: Math.floor(Math.random() * 30)  // Privacy feature
+      id: batchId,
+      status: isNearEnd ? 'finalizing' : 'open',
+      timeRemaining: secondsRemaining,
+      ordersCount: 42, // Consistent order count
+      volume: 24680.50, // Consistent volume
+      deadline: deadlineDate,
+      privateOrdersCount: 36, // Privacy feature with consistent data
+      zkProofsVerified: 28,   // Privacy feature with consistent data
+      batchAuctionAddress: '0x2B0d36FACD61B71CC05ab8F3D2355ec3631C0dd5'
     };
     
     let batch = mockBatch;

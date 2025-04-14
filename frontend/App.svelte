@@ -53,12 +53,180 @@ import EERC20Adapter from './adapters/EERC20Adapter.js';
     privacySettings.update(settings => ({ ...settings, [feature]: value }));
   };
   
-  onMount(() => {
-    // Initialize theme based on user preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.body.classList.add('dark-theme');
+  // Batch system state
+  let batchTimeRemaining = '--:--';
+  let privacyLevel = 'Low';
+  let privacyScore = 0;
+  let batchActive = false;
+  let orderCount = 0;
+  let batchStartTime = null;
+  let currentBatchId = 1; // Start with batch 1
+  let processedTransactions = new Set(); // Track transaction hashes to prevent double-counting
+  
+  // Function to start a new batch when first order is placed
+  function startNewBatch() {
+    if (!batchActive) {
+      batchActive = true;
+      batchStartTime = Date.now();
+      orderCount = 1; // First order
+      // Don't increment batch ID here - only increment when a batch completes
+      console.log(`Starting batch ${currentBatchId} at ${new Date().toISOString()}`);      
+      updateBatchState();
     }
+  }
+  
+  // Function to add an order to the current batch
+  function addOrderToBatch() {
+    if (!batchActive) {
+      startNewBatch();
+    } else {
+      orderCount++;
+      updateBatchState();
+    }
+  }
+  
+  // Make the function available in the window object for components to access
+  onMount(() => {
+    window.appFunctions = {
+      addOrderToBatch,
+      updateBatchState
+    };
+
+    // Also listen for swap events to update batch
+    const handleSwapCompleted = (event) => {
+      try {
+        if (!event || !event.detail || !event.detail.hash) {
+          console.log('Invalid swap event, cannot update batch');
+          return;
+        }
+        
+        const txHash = event.detail.hash;
+        
+        // Check if we've already processed this transaction
+        if (processedTransactions.has(txHash)) {
+          console.log('Transaction already counted in batch:', txHash);
+          return;
+        }
+        
+        // Add to processed set to prevent double-counting
+        processedTransactions.add(txHash);
+        console.log('App detected new swap completion, updating batch information');
+        addOrderToBatch();
+      } catch (error) {
+        console.error('Error handling swap event:', error);
+      }
+    };
+    
+    window.addEventListener('eerc20-swap-completed', handleSwapCompleted);
+    window.addEventListener('swap-completed', handleSwapCompleted);
+    
+    return () => {
+      window.removeEventListener('eerc20-swap-completed', handleSwapCompleted);
+      window.removeEventListener('swap-completed', handleSwapCompleted);
+      delete window.appFunctions;
+    };
   });
+  
+  // Function to update the batch state
+  function updateBatchState() {
+    if (!batchActive) {
+      batchTimeRemaining = '--:--';
+      privacyLevel = 'Low';
+      privacyScore = 0;
+      return;
+    }
+    
+    // Calculate time remaining in 5-minute batch
+    const now = Date.now();
+    const batchCycleMs = 5 * 60 * 1000; // 5 minute batches
+    const elapsedMs = now - batchStartTime;
+    const remainingMs = Math.max(0, batchCycleMs - elapsedMs);
+    
+    // Check if batch has ended
+    if (remainingMs <= 0) {
+      // Mark the current batch as completed with batch settlement
+      const completedBatchId = currentBatchId;
+      console.log(`Batch ${completedBatchId} completed with ${orderCount} orders at ${new Date().toISOString()}`);
+      
+      // Increment batch ID for the next batch that will start
+      currentBatchId++;
+      
+      // Clear processed transactions from previous batch
+      processedTransactions.clear();
+      
+      // Reset for new batch
+      batchActive = false;
+      orderCount = 0;
+      batchTimeRemaining = '--:--';
+      privacyLevel = 'Low';
+      privacyScore = 0;
+      
+      // Simulate batch settlement notification
+      if (orderCount > 0) {
+        setTimeout(() => {
+          const settlementEvent = new CustomEvent('batch-settled', {
+            detail: { batchId: completedBatchId, orders: orderCount }
+          });
+          window.dispatchEvent(settlementEvent);
+        }, 1000);
+      }
+      
+      return;
+    }
+    
+    // Update countdown display
+    const seconds = Math.floor(remainingMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    batchTimeRemaining = `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    
+    // Update privacy metrics based on order count
+    if (orderCount < 5) {
+      privacyLevel = 'Low';
+      privacyScore = Math.min(40, orderCount * 10);
+    } else if (orderCount < 15) {
+      privacyLevel = 'Medium';
+      privacyScore = 40 + ((orderCount - 5) * 4);
+    } else {
+      privacyLevel = 'High';
+      privacyScore = Math.min(98, 80 + ((orderCount - 15) * 1.2));
+    }
+  }
+  
+  // Timer interval for updating the batch state
+  let batchInterval;
+  
+  // Listen for transaction events from SwapPanel
+  function handleSwapCompleted() {
+    addOrderToBatch();
+  }
+  
+  onMount(() => {
+    // Start the batch update interval
+    batchInterval = setInterval(() => {
+      if (batchActive) {
+        updateBatchState();
+      }
+    }, 1000); // Update every second
+    
+    // Initialize theme - always use dark mode for this privacy-focused DEX
+    document.body.classList.add('dark-theme');
+    document.body.classList.remove('light-theme');
+    darkMode.set(true);
+    
+    // Start the batch monitoring interval
+    updateBatchState();
+    
+    // Add event listener for transaction events
+    window.addEventListener('swap-completed', handleSwapCompleted);
+    
+    return () => {
+      // Clean up on component destroy
+      if (batchInterval) clearInterval(batchInterval);
+      window.removeEventListener('swap-completed', handleSwapCompleted);
+    };
+  });
+
 </script>
 
 <svelte:head>
@@ -83,21 +251,24 @@ import EERC20Adapter from './adapters/EERC20Adapter.js';
           <div class="batch-info-container">
             <div class="batch-header">
               <h3>Current Batch</h3>
-              <div class="batch-id">{$currentBatch.id || 'batch-1'}</div>
+              <div class="batch-id">batch-{currentBatchId}</div>
             </div>
             
             <div class="batch-stats">
               <div class="stat">
-                <span class="stat-value">{$currentBatch.timeRemaining || '00:00'}</span>
+                <span class="stat-value">{batchTimeRemaining}</span>
                 <span class="stat-label">Remaining</span>
               </div>
               <div class="stat">
-                <span class="stat-value">{$currentBatch.ordersCount || 0}</span>
+                <span class="stat-value">{orderCount}</span>
                 <span class="stat-label">Orders</span>
               </div>
-              <div class="stat">
-                <span class="stat-value">{$currentBatch.tvl || '$0'}</span>
-                <span class="stat-label">TVL</span>
+            </div>
+            
+            <div class="privacy-meter">
+              <div class="privacy-label">Privacy Level: <span class="privacy-value" class:high={privacyLevel === 'High'} class:medium={privacyLevel === 'Medium'} class:low={privacyLevel === 'Low'}>{privacyLevel}</span></div>
+              <div class="progress-bar">
+                <div class="progress" style={`width: ${privacyScore}%`} class:high={privacyLevel === 'High'} class:medium={privacyLevel === 'Medium'} class:low={privacyLevel === 'Low'}></div>
               </div>
             </div>
           </div>
@@ -193,6 +364,57 @@ import EERC20Adapter from './adapters/EERC20Adapter.js';
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
+  }
+  
+  .privacy-meter {
+    margin-top: 0.75rem;
+  }
+  
+  .privacy-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .privacy-value {
+    font-weight: 600;
+  }
+  
+  .privacy-value.high {
+    color: #27AE60;
+  }
+  
+  .privacy-value.medium {
+    color: #F2C94C;
+  }
+  
+  .privacy-value.low {
+    color: #E84142;
+  }
+  
+  .progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  
+  .progress {
+    height: 100%;
+    transition: width 0.5s ease;
+  }
+  
+  .progress.high {
+    background: #27AE60;
+  }
+  
+  .progress.medium {
+    background: #F2C94C;
+  }
+  
+  .progress.low {
+    background: #E84142;
   }
   
   .batch-id {

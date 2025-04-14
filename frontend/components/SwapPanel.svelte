@@ -248,35 +248,79 @@
       
       try {
         // This will trigger the MetaMask popup to sign the transaction
-        const tx = await signer.sendTransaction(txRequest);
-        console.log('Transaction sent:', tx.hash);
+        const sentTx = await signer.sendTransaction(txRequest);
+        console.log('Transaction sent:', sentTx.hash);
         
         // Wait for transaction confirmation
-        const receipt = await provider.waitForTransaction(tx.hash, 1);
+        const receipt = await provider.waitForTransaction(sentTx.hash, 1);
         console.log('Transaction confirmed:', receipt);
         
-        // Transaction was successful, update UI state
+        // Record transaction in current batch and update UI
+        console.log('Transaction recorded in current batch')
+        
+        // We'll let the event system handle updating batch info to prevent double-counting
+        // This ensures the batch order count only increases by 1 per transaction
+        
+        // Emit an event that the batch system can listen for as backup
+        // Use a custom event with a specific name for better visibility
+        console.log('Preparing to emit transaction notification event');
+        try {
+          const swapEvent = new CustomEvent('eerc20-swap-completed', {
+            bubbles: true, // Allow event to bubble up the DOM tree
+            composed: true, // Allow event to cross shadow DOM boundary
+            detail: {
+              hash: sentTx.hash,
+              fromToken: fromToken.symbol,
+              toToken: toToken.symbol,
+              amount: fromTokenAmount,
+              batchId: batchInfo.id,
+              timestamp: new Date().toISOString()
+            }
+          });
+          
+          console.log('Dispatching event with data:', swapEvent.detail);
+          window.dispatchEvent(swapEvent);
+          
+          // Also create a global notification variable as backup
+          window.lastSwapTransaction = {
+            hash: sentTx.hash,
+            fromToken: fromToken.symbol,
+            toToken: toToken.symbol,
+            timestamp: new Date().toISOString()
+          };
+          
+          console.log('Swap completed event emitted successfully');
+        } catch (eventError) {
+          console.error('Error dispatching swap event:', eventError);
+        }
+        
+        // Show success message
         swapSuccess = true;
-        lastTxHash = tx.hash;
+        swapping = false;
+        lastTxHash = sentTx.hash;
         
-        // Clear the input fields
-        fromTokenAmount = '';
-        toTokenAmount = '';
-        
-        // Keep success message for 15 seconds for better visibility
+        // Don't clear inputs at all - allow user to immediately submit another transaction
+        // Just reset the success state after a delay
         setTimeout(() => {
-          swapSuccess = false;
-        }, 15000);
+          if (swapSuccess) {
+            swapSuccess = false;
+          }
+        }, 2000);
+        
+        // Keep success message for 8 seconds for better visibility
+        // but allow new submissions during this time
+        setTimeout(() => {
+          if (swapSuccess) {
+            swapSuccess = false;
+          }
+        }, 8000);
         
         // Log success in console for debugging
         console.log('SWAP SUCCESSFUL!', { 
-          txHash: tx.hash,
+          txHash: sentTx.hash,
           swapSuccess, 
           batchId: batchInfo.id 
         });
-
-        // Show an alert for extra clarity
-        alert(`Swap successfully submitted! Transaction hash: ${tx.hash.substring(0, 10)}...`);
         
       } catch (error) {
         // Check if user rejected transaction
@@ -295,8 +339,14 @@
     }
   }
   
-  // Validation for swap button - for demo purposes, don't require wallet connection
+  // Validation for swap button - allow multiple submissions to same batch
+  // Only disable when actively swapping or there's an error
   $: canSwap = Boolean(fromTokenAmount && toTokenAmount && !swapping && !swapError);
+  
+  // Reset error state when user modifies input after an error
+  $: if (fromTokenAmount || toTokenAmount) {
+    if (swapError) swapError = null;
+  }
   
   onMount(() => {
     // Initial token list could be loaded here
@@ -388,7 +438,7 @@
     
     <button 
       class="swap-button {swapSuccess ? 'success' : ''}" 
-      disabled={!fromTokenAmount || !toTokenAmount || toTokenAmount === '0' || swapping}
+      disabled={!fromTokenAmount || !toTokenAmount || toTokenAmount === '0' || swapping || swapError}
       on:click={handleSwap}
     >
       {#if swapping}
@@ -396,11 +446,13 @@
         Processing...
       {:else if swapSuccess}
         <div class="success-icon">✓</div>
-        Swap Submitted!
+        Submit Another Swap
       {:else if !$walletState.connected}
         Connect Wallet to Swap
       {:else if toTokenAmount === '0'}
         Enter An Amount
+      {:else if !canSwap && (fromTokenAmount || toTokenAmount)}
+        Invalid Swap
       {:else}
         Swap in Next Batch
       {/if}
@@ -410,19 +462,7 @@
       <div class="swap-error">{swapError}</div>
     {/if}
     
-    {#if swapSuccess && lastTxHash}
-      <div class="swap-success">
-        <div class="success-icon">✓</div>
-        <div class="success-message">
-          <div class="success-title">Swap Successfully Submitted!</div>
-          Your privacy-preserving swap has been added to the current batch auction.
-          <div class="tx-details">
-            <div class="tx-hash">Transaction ID: {lastTxHash}</div>
-            <div class="batch-info">Batch: {batchInfo.id} • Privacy Level: High</div>
-          </div>
-        </div>
-      </div>
-    {/if}
+
   </div>
 </div>
 
@@ -640,18 +680,7 @@
     text-align: center;
   }
   
-  .swap-success {
-    color: #00cc99;
-    font-size: 0.875rem;
-    margin-top: 0.75rem;
-    display: flex;
-    align-items: flex-start;
-    background: rgba(0, 204, 153, 0.1);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    border: 1px solid rgba(0, 204, 153, 0.3);
-    animation: fadeIn 0.3s ease-in-out;
-  }
+
   
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-10px); }
@@ -659,47 +688,9 @@
   }
   
   .success-icon {
-    font-size: 1.5rem;
-    margin-right: 0.75rem;
-    background: rgba(0, 204, 153, 0.2);
-    border-radius: 50%;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  
-  .success-message {
-    flex: 1;
-    text-align: left;
-  }
-  
-  .success-title {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-  }
-  
-  .tx-details {
-    margin-top: 0.75rem;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 0.5rem;
-    padding: 0.5rem;
-  }
-  
-  .tx-hash {
-    font-size: 0.75rem;
-    font-family: monospace;
-    opacity: 0.9;
-    margin-bottom: 0.25rem;
-    word-break: break-all;
-  }
-  
-  .batch-info {
-    font-size: 0.75rem;
-    opacity: 0.7;
+    color: #27AE60;
+    font-size: 1.25rem;
+    line-height: 1;
   }
   
   .swap-button.success {
