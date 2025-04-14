@@ -1,27 +1,71 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { ethers } from 'ethers';
+  import dexService from '../services/dexService';
+  import DirectConnect from './DirectConnect';
   import ThemeToggle from './ThemeToggle.svelte';
   
-  // Props from App.svelte via DexProvider
   export let connected = false;
-  export let address = null;
+  export let address = '';
   export let onConnect = () => {};
   export let onDisconnect = () => {};
   
+  let connecting = false;
+  let connectionError = null;
+  let localConnected = false;
+  let localAddress = '';
   const dispatch = createEventDispatcher();
   
-  // Format address for display
-  $: displayAddress = address ? 
-    `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : 
-    '';
+  // Use local state for more direct control, if parent props don't update
+  $: effectiveConnected = localConnected || connected;
+  $: effectiveAddress = localAddress || address;
   
-  function connectWallet() {
-    onConnect();
+  // Format address for display with safe parameter validation (Wasmlanche principle)
+  $: displayAddress = effectiveAddress && typeof effectiveAddress === 'string' && effectiveAddress.length >= 10 ? 
+    `${effectiveAddress.substring(0, 6)}...${effectiveAddress.substring(effectiveAddress.length - 4)}` : 
+    '';
+    
+
+  
+
+  
+  async function connectWallet() {
+    try {
+      console.log('Using DirectConnect utility to force wallet popup...');
+      connecting = true;
+      connectionError = null;
+
+      // Use the standalone direct connection utility that's designed to force popup
+      const result = await DirectConnect.directConnectWallet();
+      
+      if (result.success && result.accounts?.length > 0) {
+        // Set the address immediately for better UX
+        address = result.accounts[0];
+        
+        // Notify the app that we're connected
+        onConnect();
+      } else {
+        throw new Error(result.error || 'No accounts returned from wallet');
+      }
+    } catch (error) {
+      console.error('Error in direct wallet connection:', error);
+      connectionError = error.message || 'Failed to connect wallet';
+      
+      // Fall back to the regular connect method
+      onConnect();
+    } finally {
+      connecting = false;
+    }
   }
   
+  // Handle wallet disconnection
   function disconnectWallet() {
+    localConnected = false;
+    localAddress = '';
     onDisconnect();
   }
+  
+
   
   function toggleTheme() {
     dispatch('toggleTheme');
@@ -60,20 +104,38 @@
     
     <ThemeToggle on:toggle={toggleTheme} />
     
-    {#if !connected}
-      <button class="connect-button" on:click={connectWallet}>
-        <span class="connect-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19.97 6.43L12 2L4.03 6.43L12 10.85L19.97 6.43ZM20 7.97V16.5L12.5 20.5L5 16.5V7.97" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
-        Connect Wallet
-      </button>
+    {#if !effectiveConnected}
+      <button class="connect-button" on:click={connectWallet} disabled={connecting}>
+          <span class="connect-icon">
+            {#if connecting}
+              <span class="spinner">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M16 12h-4"></path>
+                </svg>
+              </span>
+            {:else}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M7 11V7C7 5.93913 7.42143 4.92172 8.17157 4.17157C8.92172 3.42143 9.93913 3 11 3H13C14.0609 3 15.0783 3.42143 15.8284 4.17157C16.5786 4.92172 17 5.93913 17 7V11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            {/if}
+          </span>
+          <span class="connect-text">{connecting ? 'Connecting...' : 'Connect Wallet'}</span>
+        </button>
+      {#if connectionError}
+        <div class="connection-error">{connectionError}</div>
+      {/if}
     {:else}
       <div class="connected-info">
         <div class="address-display">
           <span class="connected-indicator"></span>
-          <span class="address-text">{displayAddress}</span>
+          <!-- Display address with fallback message if not available -->
+          {#if displayAddress}
+            <span class="address-text">{displayAddress}</span>
+          {:else}
+            <span class="address-text address-pending">Address pending...</span>
+          {/if}
         </div>
         <button class="disconnect-button" on:click={disconnectWallet}>
           <span class="disconnect-icon">
@@ -94,6 +156,15 @@
     align-items: center;
     padding: 1.5rem 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Add spinner animation */
+  @keyframes spinner {
+    to {transform: rotate(360deg);}
+  }
+  
+  .spinner {
+    animation: spinner 1s linear infinite;
   }
   
   .logo-container {
@@ -195,6 +266,13 @@
   
   .address-text {
     font-family: monospace;
+    font-size: 0.85rem;
+    margin-left: 6px;
+  }
+  
+  .address-pending {
+    color: #E84142;
+    opacity: 0.7;
   }
   
   .disconnect-button {
@@ -212,7 +290,7 @@
   }
   
   .disconnect-button:hover {
-    background: rgba(232, 65, 66, 0.2);
+    background-color: rgba(232, 65, 66, 0.1);
     transform: rotate(90deg);
   }
   

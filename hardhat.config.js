@@ -7,6 +7,17 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || '0xac0974bec39a17e36ba4a6b4d238ff
 
 /** @type import('hardhat/config').HardhatUserConfig */
 export default {
+  // Include EncryptedERC contracts for compilation
+  paths: {
+    sources: [
+      "./contracts",
+      "./EncryptedERC/contracts"
+    ],
+    tests: "./test",
+    cache: "./cache",
+    artifacts: "./artifacts"
+  },
+  // Modified solidity config to support real EncryptedERC contracts
   solidity: {
     compilers: [
       {
@@ -20,6 +31,16 @@ export default {
       },
       {
         version: '0.8.27',
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
+        // Added for EncryptedERC verifier contracts
+        version: '0.8.0',
         settings: {
           optimizer: {
             enabled: true,

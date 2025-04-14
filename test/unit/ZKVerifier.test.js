@@ -131,13 +131,15 @@ describe("ZKVerifier", function () {
       const emptyProof = new Uint8Array(0);
       const mockEncryptedAmount = ethers.toUtf8Bytes("amount");
       
-      const result = await zkVerifier.verifyBalanceProof(
+      // Call the function and wait for the transaction to be mined
+      const tx = await zkVerifier.verifyBalanceProof(
         emptyProof,
         mockEncryptedAmount,
         user1.address
       );
+      await tx.wait();
       
-      expect(result).to.equal(false);
+      // Check the state changes instead of the return value
       expect(await zkVerifier.totalVerifications()).to.equal(1);
       expect(await zkVerifier.failedVerifications()).to.equal(1);
     });
@@ -147,13 +149,16 @@ describe("ZKVerifier", function () {
       const hugeProof = ethers.zeroPadBytes(ethers.toUtf8Bytes("huge"), 33 * 1024);
       const mockEncryptedAmount = ethers.toUtf8Bytes("amount");
       
-      const result = await zkVerifier.verifyBalanceProof(
+      // Call the function and wait for the transaction to be mined
+      const tx = await zkVerifier.verifyBalanceProof(
         hugeProof,
         mockEncryptedAmount,
         user1.address
       );
+      await tx.wait();
       
-      expect(result).to.equal(false);
+      // Check the state changes instead of the return value
+      // Each test runs in isolation, so we expect 1 failed verification not 2
       expect(await zkVerifier.failedVerifications()).to.equal(1);
     });
   });

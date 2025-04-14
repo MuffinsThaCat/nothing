@@ -1,11 +1,21 @@
 /**
  * @fileoverview Tests for the BatchSolver implementation
+ * 
+ * Uses the moduleCompatibility layer to handle CommonJS and ES Module integration
+ * while following Wasmlanche safe parameter handling principles
  */
 
 const { expect } = require("chai");
-const { ethers } = require("ethers");
-const BatchSolver = require("../../src/solver/BatchSolver");
-const zkUtils = require("../../src/solver/zkUtils");
+
+// Use the compatibility layer to safely import modules that might contain top-level await
+const { 
+  BatchSolver, 
+  ethers, 
+  zkUtils,
+  createBatchSolver,
+  initializeBatchSolver,
+  createTestMocks 
+} = require("../../src/solver/moduleCompatibility");
 
 describe("BatchSolver", function () {
   let batchSolverConfig;
@@ -27,63 +37,22 @@ describe("BatchSolver", function () {
     };
   };
 
-  beforeEach(function () {
-    // Create mock configuration
-    batchSolverConfig = {
-      maxOrdersPerBatch: 100,
-      maxPriceLevels: 50,
-      minLiquidity: 100,
-      maxSlippage: 5
-    };
+  beforeEach(async function () {
+    // Use our compatibility layer to create mocks with safe defaults
+    // This follows Wasmlanche safe parameter handling principles
+    const mocks = createTestMocks();
     
-    // Create mock BatchAuctionDEX contract with spies
-    mockBatchAuctionDEX = {
-      calls: [],
-      settleBatch: async function(...args) {
-        this.calls.push({
-          method: "settleBatch",
-          args
-        });
-        return { 
-          hash: "0xmocktxhash",
-          wait: async () => ({ blockNumber: 123456 })
-        };
-      },
-      getBatchInfo: async function() {
-        return [1, Math.floor(Date.now() / 1000) + 300, 300];
-      },
-      on: function(event, callback) {
-        this.calls.push({
-          method: "on",
-          args: [event, "callback"]
-        });
-        return this;
-      },
-      off: function(event, callback) {
-        this.calls.push({
-          method: "off",
-          args: [event, "callback"]
-        });
-        return this;
-      }
-    };
+    // Extract mock objects with proper validation and safe defaults
+    batchSolverConfig = mocks.config;
+    mockBatchAuctionDEX = mocks.mockBatchAuctionDEX;
+    mockProvider = mocks.mockProvider;
     
-    // Create mock provider
-    mockProvider = {
-      calls: [],
-      getBlock: async function() {
-        this.calls.push({
-          method: "getBlock",
-          args: ["latest"]
-        });
-        return {
-          timestamp: Math.floor(Date.now() / 1000)
-        };
-      }
-    };
+    // Create BatchSolver instance using our safe factory function
+    // This prevents issues with potential top-level await in the module
+    batchSolver = createBatchSolver(batchSolverConfig, mockBatchAuctionDEX, mockProvider);
     
-    // Create BatchSolver instance
-    batchSolver = new BatchSolver(batchSolverConfig, mockBatchAuctionDEX, mockProvider);
+    // Use safe initialization wrapper that handles potential top-level await issues
+    await initializeBatchSolver(batchSolver);
   });
 
   describe("Initialization", function () {
@@ -108,7 +77,8 @@ describe("BatchSolver", function () {
 
   describe("Order Processing", function () {
     beforeEach(async function () {
-      await batchSolver.initialize();
+      // Use safe initialization wrapper that handles potential top-level await issues
+      await initializeBatchSolver(batchSolver);
     });
 
     it("Should add new orders to the batch state", function () {
@@ -146,7 +116,8 @@ describe("BatchSolver", function () {
 
   describe("Order Book and Matching", function () {
     beforeEach(async function () {
-      await batchSolver.initialize();
+      // Use safe initialization wrapper that handles potential top-level await issues
+      await initializeBatchSolver(batchSolver);
     });
 
     it("Should group orders by pair ID", function () {
@@ -250,9 +221,312 @@ describe("BatchSolver", function () {
     });
   });
 
+  describe("Batch Auction Matching Algorithm", function () {
+    beforeEach(async function () {
+      // Use safe initialization wrapper that handles potential top-level await issues
+      await initializeBatchSolver(batchSolver);
+    });
+    
+    it("Should calculate batch auction matches with uniform clearing price", function () {
+      // Create test orders with various prices
+      const orders = [
+        { id: "order1", orderType: "BUY", price: "1050", amount: "10" },
+        { id: "order2", orderType: "BUY", price: "1030", amount: "5" },
+        { id: "order3", orderType: "BUY", price: "1010", amount: "3" },
+        { id: "order4", orderType: "SELL", price: "990", amount: "4" },
+        { id: "order5", orderType: "SELL", price: "1000", amount: "8" },
+        { id: "order6", orderType: "SELL", price: "1020", amount: "6" },
+      ];
+      
+      // Calculate matches with the new algorithm
+      const fillAmounts = batchSolver.calculateBatchAuctionMatches(orders);
+      
+      // Verify fundamental properties of the matching
+      expect(fillAmounts).to.have.lengthOf(6); // All orders should have a result
+      
+      // Get fills by order ID for easier assertions
+      const fillById = {};
+      fillAmounts.forEach(fill => {
+        fillById[fill.orderId] = fill;
+      });
+      
+      // Check that all buy orders with price >= 1000 get filled
+      expect(fillById["order1"].amount).to.be.greaterThan(0); // BUY at 1050 should be filled
+      expect(fillById["order2"].amount).to.be.greaterThan(0); // BUY at 1030 should be filled
+      expect(fillById["order3"].amount).to.be.greaterThan(0); // BUY at 1010 should be filled
+      
+      // Check that all sell orders with price <= 1000 get filled
+      expect(fillById["order4"].amount).to.be.greaterThan(0); // SELL at 990 should be filled
+      expect(fillById["order5"].amount).to.be.greaterThan(0); // SELL at 1000 should be filled
+      
+      // SELL at 1020 should NOT be filled (price above clearing price)
+      expect(fillById["order6"].amount).to.equal(0);
+      
+      // Total buy volume should equal total sell volume (conservation of value)
+      const totalBuyFill = fillById["order1"].amount + fillById["order2"].amount + fillById["order3"].amount;
+      const totalSellFill = fillById["order4"].amount + fillById["order5"].amount + fillById["order6"].amount;
+      expect(totalBuyFill).to.be.closeTo(totalSellFill, 0.0001); // Allow for floating point rounding errors
+    });
+    
+    it("Should handle pro-rata matching when supply exceeds demand", function () {
+      // Create test orders with excess sell orders
+      const orders = [
+        { id: "buy1", orderType: "BUY", price: "1000", amount: "10" },
+        { id: "sell1", orderType: "SELL", price: "990", amount: "15" },
+        { id: "sell2", orderType: "SELL", price: "995", amount: "5" },
+      ];
+      
+      // Calculate matches with the new algorithm
+      const fillAmounts = batchSolver.calculateBatchAuctionMatches(orders);
+      
+      // Get fills by order ID
+      const fillById = {};
+      fillAmounts.forEach(fill => {
+        fillById[fill.orderId] = fill;
+      });
+      
+      // Buyer should be completely filled
+      expect(fillById["buy1"].amount).to.be.closeTo(10, 0.0001);
+      
+      // Sellers should be partially filled proportionally
+      const totalSellFill = fillById["sell1"].amount + fillById["sell2"].amount;
+      expect(totalSellFill).to.be.closeTo(10, 0.0001); // Should match buy amount
+      
+      // sell1 should get 75% of the fill (15 of 20 total = 75%)
+      expect(fillById["sell1"].amount).to.be.closeTo(7.5, 0.0001);
+      
+      // sell2 should get 25% of the fill (5 of 20 total = 25%)
+      expect(fillById["sell2"].amount).to.be.closeTo(2.5, 0.0001);
+    });
+    
+    it("Should handle pro-rata matching when demand exceeds supply", function () {
+      // Create test orders with excess buy orders
+      const orders = [
+        { id: "buy1", orderType: "BUY", price: "1010", amount: "10" },
+        { id: "buy2", orderType: "BUY", price: "1005", amount: "10" },
+        { id: "sell1", orderType: "SELL", price: "1000", amount: "15" },
+      ];
+      
+      // Calculate matches with the new algorithm
+      const fillAmounts = batchSolver.calculateBatchAuctionMatches(orders);
+      
+      // Get fills by order ID
+      const fillById = {};
+      fillAmounts.forEach(fill => {
+        fillById[fill.orderId] = fill;
+      });
+      
+      // Seller should be completely filled
+      expect(fillById["sell1"].amount).to.be.closeTo(15, 0.0001);
+      
+      // Buyers should be partially filled proportionally
+      const totalBuyFill = fillById["buy1"].amount + fillById["buy2"].amount;
+      expect(totalBuyFill).to.be.closeTo(15, 0.0001); // Should match sell amount
+      
+      // Both buyers have equal amounts, so they should get equal fills
+      expect(fillById["buy1"].amount).to.be.closeTo(7.5, 0.0001);
+      expect(fillById["buy2"].amount).to.be.closeTo(7.5, 0.0001);
+    });
+    
+    it("Should find the correct clearing price", function () {
+      // Create buy and sell orders
+      const buyOrders = [
+        { id: "buy1", orderType: "BUY", price: "1050", amount: "5" },
+        { id: "buy2", orderType: "BUY", price: "1025", amount: "3" },
+        { id: "buy3", orderType: "BUY", price: "1000", amount: "2" },
+        { id: "buy4", orderType: "BUY", price: "990", amount: "1" },
+      ];
+      
+      const sellOrders = [
+        { id: "sell1", orderType: "SELL", price: "980", amount: "2" },
+        { id: "sell2", orderType: "SELL", price: "1000", amount: "4" },
+        { id: "sell3", orderType: "SELL", price: "1030", amount: "3" },
+        { id: "sell4", orderType: "SELL", price: "1050", amount: "2" },
+      ];
+      
+      // Directly test the clearing price algorithm
+      const clearingPrice = batchSolver.findClearingPrice(buyOrders, sellOrders);
+      
+      // The clearing price should be 1000
+      // At this price:
+      // - Buy orders at/above 1000 = 10 units (buy1 + buy2 + buy3)
+      // - Sell orders at/below 1000 = 6 units (sell1 + sell2)
+      // This is the lowest price where there is sufficient sell volume
+      expect(clearingPrice).to.equal(1000);
+    });
+    
+    it("Should handle input validation and return safe defaults", function () {
+      // Test with invalid input
+      const nullResult = batchSolver.calculateBatchAuctionMatches(null);
+      expect(nullResult).to.be.an('array').that.is.empty;
+      
+      const emptyResult = batchSolver.calculateBatchAuctionMatches([]);
+      expect(emptyResult).to.be.an('array').that.is.empty;
+      
+      // Test with order count exceeding maxOrdersPerBatch
+      const largeOrderSet = Array(batchSolverConfig.maxOrdersPerBatch + 10).fill().map((_, i) => ({
+        id: `order${i}`,
+        orderType: i % 2 === 0 ? "BUY" : "SELL",
+        price: "1000",
+        amount: "1"
+      }));
+      
+      const largeResult = batchSolver.calculateBatchAuctionMatches(largeOrderSet);
+      expect(largeResult.length).to.be.at.most(batchSolverConfig.maxOrdersPerBatch);
+    });
+  });
+  
+  describe("Homomorphic Volume Estimation", function () {
+    beforeEach(async function () {
+      // Use safe initialization wrapper that handles potential top-level await issues
+      await initializeBatchSolver(batchSolver);
+    });
+    
+    it("Should safely parse encrypted data components", function () {
+      // Create some mock encrypted data
+      const mockEncryptedData = Buffer.alloc(120); // Larger than the required 99 bytes
+      for (let i = 0; i < mockEncryptedData.length; i++) {
+        mockEncryptedData[i] = i % 256;
+      }
+      
+      // Parse the components
+      const components = batchSolver._parseEncryptedData(mockEncryptedData);
+      
+      // Verify the components were extracted correctly
+      expect(components).to.not.be.null;
+      expect(components).to.have.property('r').with.lengthOf(33);
+      expect(components).to.have.property('C1').with.lengthOf(33);
+      expect(components).to.have.property('C2').with.lengthOf(33);
+      
+      // Verify the components contain the expected data
+      for (let i = 0; i < 33; i++) {
+        expect(components.r[i]).to.equal(i % 256);
+        expect(components.C1[i]).to.equal((i + 33) % 256);
+        expect(components.C2[i]).to.equal((i + 66) % 256);
+      }
+    });
+    
+    it("Should handle invalid encrypted data safely", function () {
+      // Test with null input
+      const nullResult = batchSolver._parseEncryptedData(null);
+      expect(nullResult).to.be.null;
+      
+      // Test with short input
+      const shortData = Buffer.alloc(50);
+      const shortResult = batchSolver._parseEncryptedData(shortData);
+      expect(shortResult).to.be.null;
+    });
+    
+    it("Should compute privacy-preserving component fingerprints", function () {
+      // Create mock components
+      const components = {
+        r: Buffer.alloc(33, 1),
+        C1: Buffer.alloc(33, 2),
+        C2: Buffer.alloc(33, 3)
+      };
+      
+      // Compute fingerprint
+      const fingerprint = batchSolver._computeComponentFingerprint(components);
+      
+      // Should be a valid fingerprint (keccak256 hash)
+      expect(fingerprint).to.be.a('string');
+      expect(fingerprint.startsWith('0x')).to.be.true;
+      expect(fingerprint.length).to.equal(66); // 0x + 64 hex chars
+    });
+    
+    it("Should calculate homomorphic range estimations", function () {
+      const mockComponents = {
+        r: Buffer.alloc(33, 1),
+        C1: Buffer.alloc(33, 2),
+        C2: Buffer.alloc(33, 3)
+      };
+      
+      const result = batchSolver._homomorphicRangeEstimation(
+        mockComponents,
+        "BUY",
+        "BTC-ETH"
+      );
+      
+      // The result should be a BigInt representing magnitude
+      expect(typeof result).to.equal('bigint');
+    });
+    
+    it("Should estimate volume from encrypted amount", function () {
+      // Create a mock order with encrypted amount
+      const mockEncryptedAmount = Buffer.alloc(120, 5); // Fill with pattern
+      const mockOrder = {
+        id: "order1",
+        orderType: "BUY",
+        price: "1000",
+        pairId: "BTC-ETH",
+        timestamp: Date.now() - 1000, // 1 second ago
+        encryptedAmount: mockEncryptedAmount
+      };
+      
+      // Estimate volume
+      const estimatedVolume = batchSolver.estimateVolume(mockOrder);
+      
+      // Should return a valid BigInt
+      expect(typeof estimatedVolume).to.equal('bigint');
+      expect(estimatedVolume).to.be.at.least(0n);
+    });
+    
+    it("Should apply privacy-preserving rounding to estimated volumes", function () {
+      // Test rounding for different magnitudes
+      const smallValue = 7n;
+      const mediumValue = 156n;
+      const largeValue = 12345n;
+      
+      const smallRounded = batchSolver._privacyPreservingRounding(smallValue);
+      const mediumRounded = batchSolver._privacyPreservingRounding(mediumValue);
+      const largeRounded = batchSolver._privacyPreservingRounding(largeValue);
+      
+      // Small values should be rounded to nearest unit
+      expect(smallRounded).to.be.a('bigint');
+      expect(smallRounded).to.be.at.least(smallValue - 5n);
+      expect(smallRounded).to.be.at.most(smallValue + 5n);
+      
+      // Medium values should be rounded to nearest 10
+      expect(mediumRounded).to.be.a('bigint');
+      expect(mediumRounded % 10n).to.be.at.most(5n); // Should be close to a multiple of 10
+      
+      // Large values should have more significant rounding
+      expect(largeRounded).to.be.a('bigint');
+      expect(largeRounded / 100n).to.be.at.least(largeValue / 100n - 5n);
+      expect(largeRounded / 100n).to.be.at.most(largeValue / 100n + 5n);
+    });
+    
+    it("Should handle invalid inputs to estimateVolume safely", function () {
+      // Test with null order
+      const nullResult = batchSolver.estimateVolume(null);
+      expect(nullResult).to.equal(0n);
+      
+      // Test with order missing encryptedAmount
+      const incompleteOrder = {
+        id: "order1",
+        orderType: "BUY",
+        price: "1000"
+        // No encryptedAmount
+      };
+      const incompleteResult = batchSolver.estimateVolume(incompleteOrder);
+      expect(incompleteResult).to.equal(0n);
+      
+      // Test with extremely large encrypted data (exceeding MAX_PARAM_SIZE)
+      const largeOrder = {
+        id: "order1",
+        orderType: "BUY",
+        price: "1000",
+        encryptedAmount: Buffer.alloc(33 * 1024) // 33KB (should exceed the 32KB limit)
+      };
+      const largeResult = batchSolver.estimateVolume(largeOrder);
+      expect(largeResult).to.equal(0n);
+    });
+  });
+  
   describe("Fill Amount Generation", function () {
     beforeEach(async function () {
-      await batchSolver.initialize();
+      // Use safe initialization wrapper that handles potential top-level await issues
+      await initializeBatchSolver(batchSolver);
     });
 
     it("Should generate fill amounts for matched orders", function () {

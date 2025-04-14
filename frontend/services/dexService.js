@@ -51,6 +51,10 @@ import createBridgeService from '../../src/integration/bridge/index.js';
 // Import network configuration
 import { NETWORKS, getDefaultNetwork } from '../config/networks.js';
 
+// Import privacy utilities
+import { generateEncryptionKeys, generateZKProof, encryptValue } from '../utils/PrivacyUtils.js';
+import registrarService from './registrarService.js';
+
 // Safe import of zkUtils with browser fallback
 let zkUtilsFallback = BrowserZkAdapter;
 
@@ -313,11 +317,41 @@ export async function initializeDexServices() {
 /**
  * Connect to wallet with safe parameter validation
  * Following safe parameter handling principles
+ * @param {Object} preConnectedProvider - Optional pre-connected provider
+ * @param {Object} preConnectedSigner - Optional pre-connected signer
+ * @param {string} preConnectedAddress - Optional pre-connected address
+ * @return {Promise<boolean>} Success status
  */
-export async function connectWallet() {
+export async function connectWallet(preConnectedProvider = null, preConnectedSigner = null, preConnectedAddress = null) {
   console.log('Connecting wallet with safe parameter handling...');
   
   try {
+    // If we have pre-connected info, use it directly (from WalletConnector)
+    if (preConnectedProvider && preConnectedAddress) {
+      console.log('Using pre-connected wallet:', preConnectedAddress);
+      
+      // Skip wallet connection and use provided connection
+      const provider = preConnectedProvider;
+      const connectedAddress = preConnectedAddress;
+      const signer = preConnectedSigner || (provider ? await provider.getSigner() : null);
+      
+      // Update wallet state with pre-connected info
+      walletState.update(state => ({
+        ...state,
+        provider,
+        signer,
+        address: connectedAddress,
+        connected: true,
+        connecting: false,
+        error: null
+      }));
+      
+      // Initialize pools and other services with privacy preservation
+      await initializeAfterConnection(provider, signer, connectedAddress);
+      return true;
+    }
+    
+    // If no pre-connected info, try to connect directly
     // Check if wallet provider exists - Wasmlanche principle: parameter validation
     if (typeof window.ethereum === 'undefined') {
       console.warn('No Web3 provider detected');
@@ -329,14 +363,30 @@ export async function connectWallet() {
       return false;
     }
     
-    // Request accounts with timeout for resilience - Wasmlanche principle: handling unreasonable waits
+    // Request accounts with a more direct approach to ensure MetaMask popup appears
+    // Follows Wasmlanche principle: handling unreasonable waits with timeout
     let accounts;
     try {
       console.log('Requesting accounts from wallet...');
-      accounts = await Promise.race([
-        window.ethereum.request({ method: 'eth_requestAccounts' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Request accounts timeout')), 15000))
-      ]);
+      
+      // Force UI popup with explicit provider instance
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // First try the direct connection - most reliable way to trigger MetaMask
+      try {
+        console.log('Attempting direct signer connection...');
+        const signer = await provider.getSigner();
+        accounts = [await signer.getAddress()];
+        console.log('Direct connection successful');
+      } catch (directError) {
+        console.log('Direct connection failed, trying fallback method:', directError.message);
+        
+        // Fallback to legacy method with timeout for resilience
+        accounts = await Promise.race([
+          window.ethereum.request({ method: 'eth_requestAccounts' }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Request accounts timeout')), 15000))
+        ]);
+      }
       console.log('Accounts received:', accounts ? accounts.length : 0);
     } catch (error) {
       console.error('Failed to request accounts:', error.message);
@@ -603,6 +653,90 @@ export async function connectWallet() {
       error: error.message
     }));
     return false;
+  }
+}
+
+/**
+ * Initialize all services after wallet connection
+ * @param {Object} provider - Provider from wallet
+ * @param {Object} signer - Signer from wallet
+ * @param {String} address - Connected wallet address
+ * @return {Promise<void>}
+ */
+async function initializeAfterConnection(provider, signer, address) {
+  try {
+    console.log('Initializing privacy-preserving DEX services...');
+    
+    // Get chain ID from provider
+    const network = await provider.getNetwork();
+    const chainId = network.chainId;
+    
+    // Update network state with validation - Wasmlanche principle
+    networkStatus.update(state => ({
+      ...state,
+      chainId,
+      networkName: getNetworkName(chainId),
+      isSupported: isSupportedNetwork(chainId)
+    }));
+    
+    // Check if user is registered with the Registrar contract
+    // This is crucial for privacy preservation
+    const isUserRegistered = await registrarService.isUserRegistered(provider, address);
+    
+    // Update privacy status initially
+    privacySettings.update(state => ({
+      ...state,
+      userRegistered: isUserRegistered,
+      keysGenerated: isUserRegistered
+    }));
+    
+    if (!isUserRegistered) {
+      console.log('User not registered, generating encryption keys...');
+      
+      try {
+        // Generate encryption keys for ZK operations
+        const publicKey = await generateEncryptionKeys(address);
+        
+        console.log('Registering user with Registrar contract...');
+        
+        // Register user with Registrar contract
+        const registrationSuccess = await registrarService.registerUser(signer, publicKey);
+        
+        if (registrationSuccess) {
+          console.log('User successfully registered with privacy system');
+          
+          // Update privacy status after registration
+          privacySettings.update(state => ({
+            ...state,
+            userRegistered: true,
+            keysGenerated: true
+          }));
+        } else {
+          console.error('Failed to register user with privacy system');
+        }
+      } catch (regError) {
+        console.error('Error in user registration:', regError);
+        privacySettings.update(state => ({
+          ...state,
+          error: 'Failed to register with privacy system: ' + regError.message
+        }));
+      }
+    } else {
+      console.log('User already registered with privacy system');
+    }
+    
+    // Initialize the DEX services
+    await initializeDexServices(provider, signer);
+    
+    isInitialized.set(true);
+  } catch (error) {
+    console.error('Error in privacy-preserving initialization:', error);
+    // Don't block the user from using basic features if privacy setup fails
+    isInitialized.set(true);
+    privacySettings.update(state => ({
+      ...state,
+      error: error.message
+    }));
   }
 }
 

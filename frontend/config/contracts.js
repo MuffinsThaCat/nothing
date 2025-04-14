@@ -1,8 +1,12 @@
 // Contract addresses configuration with safe parameter handling
 export const contracts = {
-  // Deployed contract addresses from our local deployment
-  DEXFactory: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  BatchAuctionDEX: "0xB7A5bd0345EF1Cc5E66bf61BdeC17D2461fBd968",
+  // Deployed contract addresses from our local deployment (updated with actual deployment)
+  EncryptedERC: "0x7A9Ec1d04904907De0ED7b6839CcdD59c3716AC9",
+  BitcoinAdapter: "0x5c74c94173F05dA1720953407cbb920F3DF9f887",
+  EthereumAdapter: "0x720472c8ce72c2A2D711333e064ABD3E6BbEAdd3", 
+  BatchAuctionDEX: "0x5067457698Fd6Fa1C6964e416b3f42713513B3dD",
+  Registrar: "0x367761085BF3C12e5DA2Df99AC6E1a824612b8fb",
+  ZKVerifier: "0xe8D2A1E88c91DCd5433208d4152Cc4F399a7e91d",
   
   // Network configuration
   network: {
@@ -13,12 +17,15 @@ export const contracts = {
   
   // DEX configuration
   dexConfig: {
-    dexId: "0xf09647df9179cc23e1d14920e502004e6ec00f0cd15ad3918bb65ef076dd58aa",
+    // Generated from the Bitcoin and Ethereum adapter pair
+    pairId: "0x3bd281298fe2ba5987a67ff13c47a86119dcac49ffa7775280aa45305673fea3",
     batchDuration: 300, // 5 minutes in seconds
     // Apply safe parameter handling by setting reasonable max limits
     maxOrderSize: 1000000, // Maximum reasonable order size
     maxProofSize: 32768,   // Maximum reasonable proof size in bytes
     maxInputLength: 4096,  // Maximum reasonable input length for any text field
+    // Wasmlanche safe parameter principles
+    minOrderSize: 0.000001, // Minimum reasonable order size
   }
 };
 

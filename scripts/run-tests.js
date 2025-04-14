@@ -11,10 +11,30 @@ const fs = require('fs');
 
 // Configuration
 const TEST_CATEGORIES = [
-  { name: 'Contract Unit Tests', command: 'npx hardhat test test/unit/**/*.test.js', required: true },
-  { name: 'ZK Utils Tests', command: 'npx hardhat test test/zkutils/**/*.test.js', required: true },
-  { name: 'Solver Tests', command: 'npx hardhat test test/solver/**/*.test.js', required: true },
-  { name: 'Integration Tests', command: 'npx hardhat test test/integration/**/*.test.js', required: true },
+  { 
+    name: 'Contract Unit Tests', 
+    command: 'npx', 
+    args: ['hardhat', 'test', 'test/unit/BatchAuctionDEX.test.js', 'test/unit/ZKVerifier.test.js'],
+    required: true 
+  },
+  { 
+    name: 'ZK Utils Tests', 
+    command: 'node', 
+    args: ['--experimental-vm-modules', 'node_modules/.bin/hardhat', 'test', 'test/zkutils/zkUtils.test.js'],
+    required: true 
+  },
+  { 
+    name: 'Solver Tests', 
+    command: 'node', 
+    args: ['--experimental-vm-modules', 'node_modules/.bin/hardhat', 'test', 'test/solver/BatchSolver.test.js'],
+    required: true 
+  },
+  { 
+    name: 'Integration Tests', 
+    command: 'node', 
+    args: ['--experimental-vm-modules', 'node_modules/.bin/hardhat', 'test', 'test/integration/DEXSystem.test.js'],
+    required: true 
+  },
 ];
 
 // ANSI color codes
@@ -86,9 +106,8 @@ async function runTestCategory(category) {
   
   try {
     // Split the command into the executable and args
-    const parts = category.command.split(' ');
-    const command = parts[0];
-    const args = parts.slice(1);
+    const command = category.command;
+    const args = category.args || [];
     
     const { exitCode, stdout } = await runCommand(command, args, { 
       cwd: path.resolve(__dirname, '..') 
