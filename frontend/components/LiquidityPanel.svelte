@@ -13,11 +13,14 @@
   let removeStatus = null; // For remove liquidity operations
   
   // Tokens for add liquidity
-  let token1 = { symbol: 'EERC20-AVAX', logo: '🔒' };
-  let token2 = { symbol: 'EERC20-USDC', logo: '🔒' };
+  let token1 = {};
+  let token2 = {};
   let slippage = 0.5;
   let token1BalanceDisplay = '32.5';
   let token2BalanceDisplay = '1,250.75';
+  
+  // Add liquidity sub-tab control
+  let addLiquiditySubTab = 'browse'; // 'browse' or 'add'
   
   // Remove liquidity state
   let selectedPoolForRemove = null;
@@ -100,20 +103,32 @@
     // Set the tokens directly from the pool (no need to search)
     token1 = {
       symbol: pool.token1.symbol,
-      logo: pool.token1.logo || '🔒'
+      logo: pool.token1.logo || '🔒',
+      address: pool.token1.address || '0x4EE6eCAD1c2Dae9f525404De8555724e3c35d07B' // Default to the Bitcoin Adapter address
     };
     
     token2 = {
       symbol: pool.token2.symbol,
-      logo: pool.token2.logo || '🔒'
+      logo: pool.token2.logo || '🔒',
+      address: pool.token2.address || '0xBEc49fA140aCaA83533fB00A2BB19bDdd0290f25' // Default to the Ethereum Adapter address
     };
     
     // Reset amounts for new entry
     token1Amount = '';
     token2Amount = '';
     
-    // Switch to add liquidity tab
-    selectedTab = 'add';
+    // Switch to add liquidity form tab
+    addLiquiditySubTab = 'add';
+  }
+  
+  // Function to reset the form and go back to pool selection
+  function resetForm() {
+    token1 = {};
+    token2 = {};
+    token1Amount = '';
+    token2Amount = '';
+    addLiquiditySubTab = 'browse';
+    addLiquidityStatus = null;
   }
   
   // Switch to remove liquidity tab with the selected pool
@@ -167,26 +182,40 @@
       console.log('Remove liquidity result:', result);
       
       if (result.success) {
-        removeStatus = {
-          success: true,
-          message: `Successfully removed ${safeAmount} LP tokens`
-        };
-        // Successfully removed liquidity, refresh the UI
-        // Refresh pools list with safety check
+        // Transaction was successful
+        console.log('Liquidity removal successful:', result);
+        
+        // Update the UI based on the transaction result
+        if (result.txHash) {
+          removeStatus = {
+            success: true,
+            message: `Successfully removed ${safeAmount} LP tokens`,
+            txHash: result.txHash
+          };
+        } else {
+          removeStatus = {
+            success: true,
+            message: `Successfully removed ${safeAmount} LP tokens`
+          };
+        }
+        
+        // Refresh the pools list
         try {
           await refreshPools();
-        } catch (refreshError) {
-          console.error('Error refreshing pools after remove:', refreshError);
-          // Continue execution even if refresh fails
+        } catch (error) {
+          console.error('Error refreshing pools after removing liquidity:', error);
         }
       } else {
+        // Transaction failed
         removeStatus = {
           success: false,
           message: result.error || 'Failed to remove liquidity'
         };
       }
       
-      setTimeout(() => { removeStatus = null; }, 3000);
+      // Clear status message after a longer delay on success to allow user to see transaction hash
+      const clearDelay = result.success ? 6000 : 4000;
+      setTimeout(() => { removeStatus = null; }, clearDelay);
     } catch (error) {
       console.error('Error removing liquidity:', error);
       processing = false;
@@ -241,13 +270,8 @@
         poolId = myPools[existingPoolIndex].id;
       } else {
         // For this demo we'll create a temporary poolId if not found
-        poolId = `pool-${token1.symbol}-${token2.symbol}`;
+        poolId = `${token1.symbol.toLowerCase()}-${token2.symbol.toLowerCase()}`;
       }
-      
-      // Convert amounts to proper format for blockchain using safe conversion
-      // Wasmlanche principle: safe parameter handling with validation
-      const token1AmountFloat = parseFloat(token1Amount);
-      const token2AmountFloat = parseFloat(token2Amount);
       
       // Using string values for token amounts to avoid precision issues
       const tokenAmounts = {
@@ -255,12 +279,15 @@
         tokenB: token2Amount
       };
       
+      // Provide token addresses to the addLiquidityToPool function
       // Call the dexService addLiquidity function with full parameters
       // This will handle wallet signing and transaction processing
       const result = await dexService.addLiquidityToPool({
         poolId,
+        token1: token1,
+        token2: token2,
         tokenAmounts,
-        slippageTolerance: 0.5, // 0.5% slippage tolerance
+        slippageTolerance: slippage, // Use the user-selected slippage
         providerAddress: $walletState.address
       });
       
@@ -268,64 +295,43 @@
         // Transaction was successful
         console.log('Liquidity addition successful:', result);
         
-        // Update the UI based on the transaction result
-        if (existingPoolIndex >= 0) {
-          // Update existing pool
-          myPools[existingPoolIndex].myLiquidity = '$' + (
-            parseFloat(myPools[existingPoolIndex].myLiquidity.replace('$', '')) + 
-            parseFloat(token1Amount) * 100
-          ).toFixed(2);
-          myPools = [...myPools]; // Trigger reactivity
-          console.log('Updated liquidity in existing pool', myPools[existingPoolIndex]);
-        } else {
-          // Add new pool
-          const newPool = {
-            id: poolId,
-            token1,
-            token2,
-            myLiquidity: '$' + (parseFloat(token1Amount) * 100).toFixed(2),
-            totalLiquidity: '$' + (parseFloat(token1Amount) * 500).toFixed(2),
-            apr: (Math.random() * 10 + 5).toFixed(1) + '%',
-            privacyLevel: 3,
-            txHash: result.txHash // Store transaction hash for reference
-          };
-          
-          myPools = [...myPools, newPool];
-          console.log('Added new liquidity pool', newPool);
-        }
+        // Show success message with transaction details
+        addLiquidityStatus = {
+          success: true,
+          message: `Successfully added ${token1Amount} ${token1.symbol} and ${token2Amount} ${token2.symbol} to the pool`,
+          txHash: result.txHash
+        };
         
-        // Reset form values
+        // Reset input fields
         token1Amount = '';
         token2Amount = '';
         
-        // Switch to the my-pools tab
-        selectedTab = 'my-pools';
-        
-        // Show a success message to the user
-        addLiquidityStatus = {
-          success: true,
-          message: `Successfully added liquidity for ${token1.symbol}/${token2.symbol}! Transaction hash: ${result.txHash.substring(0, 8)}...`
-        };
-        setTimeout(() => { addLiquidityStatus = null; }, 5000); // Clear after 5 seconds
+        // Refresh the pools list
+        try {
+          await refreshPools();
+        } catch (error) {
+          console.error('Error refreshing pools after adding liquidity:', error);
+        }
       } else {
         // Transaction failed
-        console.error('Error adding liquidity:', result.error);
         addLiquidityStatus = {
           success: false,
-          message: `Failed to add liquidity: ${result.error}`
+          message: result.error || 'Failed to add liquidity'
         };
-        setTimeout(() => { addLiquidityStatus = null; }, 5000); // Clear after 5 seconds
       }
+      
+      // Clear status message after a longer delay on success to allow user to see transaction hash
+      const clearDelay = result.success ? 6000 : 4000;
+      setTimeout(() => { addLiquidityStatus = null; }, clearDelay);
+      processing = false;
     } catch (error) {
       console.error('Error adding liquidity:', error);
+      processing = false;
       addLiquidityStatus = {
         success: false,
-        message: `Error: ${error.message || 'Unknown error'}`
+        message: error.message || 'An error occurred while adding liquidity'
       };
-      setTimeout(() => { addLiquidityStatus = null; }, 5000); // Clear after 5 seconds
-    } finally {
-      // Ensure processing state is reset
-      processing = false;
+      setTimeout(() => { addLiquidityStatus = null; }, 3000);
     }
   }
   
@@ -456,31 +462,91 @@
     <div class="my-pools-container">
       <div class="section-header">
         <h3>Add Liquidity to Privacy Pool</h3>
-        <div class="privacy-indicator">
-          <span class="privacy-stats">🔐 Add to Existing Pools</span>
+        <div class="sub-tabs">
+          <button 
+            class="sub-tab {addLiquiditySubTab === 'browse' ? 'active' : ''}"
+            on:click={resetForm}
+            aria-label="Browse all pools"
+          >
+            <span class="sub-tab-icon">🔍</span> Browse Pools
+          </button>
+          <button 
+            class="sub-tab {addLiquiditySubTab === 'add' ? 'active' : ''}"
+            on:click={() => token1.symbol && token2.symbol && (addLiquiditySubTab = 'add')}
+            disabled={!token1.symbol || !token2.symbol}
+            aria-label="Add liquidity form"
+          >
+            <span class="sub-tab-icon">💧</span> Add Liquidity
+          </button>
         </div>
       </div>
       
-      <div class="pool-card add-liquidity-card">
-        <div class="pool-header">
-          <div class="pool-tokens">
-            <div class="token-pair">
-              <div class="token-logo shine">{token1.logo}</div>
-              <div class="token-logo second shine">{token2.logo}</div>
-            </div>
-            <div class="token-names">
-              {token1.symbol} / {token2.symbol}
-            </div>
-          </div>
-          <div class="pool-privacy">
-            <div class="privacy-badge high">
-              <span class="privacy-dot"></span>
-              <span class="privacy-label">High Privacy</span>
-            </div>
-          </div>
+      {#if addLiquiditySubTab === 'browse'}
+        <!-- Pool selection interface -->
+        <div class="pools-grid">
+          {#each myPools as pool}
+            <button 
+              class="pool-card clickable"
+              on:click={() => handleAddMoreLiquidity(pool)}
+              on:keydown={(e) => e.key === 'Enter' && handleAddMoreLiquidity(pool)}
+              type="button"
+              aria-label="Select {pool.token1.symbol}/{pool.token2.symbol} pool"
+            >
+              <div class="pool-header">
+                <div class="pool-tokens">
+                  <div class="token-pair">
+                    <div class="token-logo">{pool.token1.logo}</div>
+                    <div class="token-logo second">{pool.token2.logo}</div>
+                  </div>
+                  <div class="token-names">
+                    {pool.token1.symbol} / {pool.token2.symbol}
+                  </div>
+                </div>
+                <div class="pool-privacy">
+                  <div class="privacy-badge high">
+                    <span class="privacy-dot"></span>
+                    <span class="privacy-label">High Privacy</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="pool-stats enhanced">
+                <div class="stat">
+                  <div class="stat-label">Total Liquidity</div>
+                  <div class="stat-value">{pool.totalLiquidity}</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-label">APR</div>
+                  <div class="stat-value highlight">{pool.apr}</div>
+                </div>
+              </div>
+              
+              <div class="pool-action-button primary">Add Liquidity</div>
+            </button>
+          {/each}
         </div>
+      {:else if addLiquiditySubTab === 'add'}
+        <!-- Add liquidity form interface -->
+        <div class="pool-card add-liquidity-card">
+          <div class="pool-header">
+            <div class="pool-tokens">
+              <div class="token-pair">
+                <div class="token-logo shine">{token1.logo}</div>
+                <div class="token-logo second shine">{token2.logo}</div>
+              </div>
+              <div class="token-names">
+                {token1.symbol} / {token2.symbol}
+              </div>
+            </div>
+            <div class="pool-privacy">
+              <div class="privacy-badge high">
+                <span class="privacy-dot"></span>
+                <span class="privacy-label">High Privacy</span>
+              </div>
+            </div>
+          </div>
         
-        <div class="token-inputs card-section">
+          <div class="token-inputs card-section">
           <div class="token-input-container">
             <div class="input-label">
               <span>First Token Amount</span>
@@ -576,9 +642,15 @@
         {#if addLiquidityStatus}
           <div class="status-message {addLiquidityStatus.success ? 'success' : 'error'}">
             {addLiquidityStatus.message}
+            {#if addLiquidityStatus.success && addLiquidityStatus.txHash}
+              <div class="tx-hash">
+                Transaction: <span class="hash">{addLiquidityStatus.txHash.substring(0, 10)}...{addLiquidityStatus.txHash.substring(addLiquidityStatus.txHash.length - 8)}</span>
+              </div>
+            {/if}
           </div>
         {/if}
-      </div>
+        </div>
+      {/if}
     </div>
   {:else if selectedTab === 'my-pools'}
     <div class="my-pools-container">
@@ -748,6 +820,11 @@
         {#if removeStatus}
           <div class="status-message {removeStatus.success ? 'success' : 'error'}">
             {removeStatus.message}
+            {#if removeStatus.success && removeStatus.txHash}
+              <div class="tx-hash">
+                Transaction: <span class="hash">{removeStatus.txHash.substring(0, 10)}...{removeStatus.txHash.substring(removeStatus.txHash.length - 8)}</span>
+              </div>
+            {/if}
           </div>
         {/if}
         
@@ -970,6 +1047,79 @@
     display: flex;
     flex-direction: column;
   }
+  
+  .sub-tabs {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  
+  .sub-tab {
+    background: rgba(20, 20, 20, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    padding: 0.35rem 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  
+  .sub-tab.active {
+    background: rgba(232, 65, 66, 0.15);
+    border-color: rgba(232, 65, 66, 0.4);
+    color: #fff;
+  }
+  
+  .sub-tab:hover:not(:disabled) {
+    background: rgba(232, 65, 66, 0.1);
+    border-color: rgba(232, 65, 66, 0.3);
+  }
+  
+  .sub-tab:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .sub-tab-icon {
+    font-size: 0.9rem;
+  }
+  
+  .pools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  
+  .clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    text-align: left;
+    padding: 0;
+    width: 100%;
+  }
+  
+  .clickable:hover {
+    transform: translateY(-2px);
+    border-color: rgba(232, 65, 66, 0.4);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  }
+  
+  .clickable:focus {
+    outline: 2px solid #e84142;
+    outline-offset: 2px;
+  }
+  
+  /* Sub-tab styles replace the need for back button */
   
   /* This secondary-button style replaces the old action-button styles */
   .liquidity-tabs {
